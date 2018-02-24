@@ -42,12 +42,15 @@ namespace BataTurboNet
             if (Properties.Settings.Default.Simulation)
             {
                 var gpsInfo = new GPSLocation();
-                gpsInfo.devicename = "test";
+                gpsInfo.deviceName = "test";
                 gpsInfo.Latitude = 52.4897266086191;
                 gpsInfo.Longitude = 6.13765982910991;
                 gpsInfo.Rssi = (float)-59.5864372253418;
 
                 PostGpsLocation(gpsInfo);
+
+                PostDeviceLifeSign("test-online", 1, true);
+                PostDeviceLifeSign("test-offline", 2, false);
             }
             else
             {
@@ -60,7 +63,38 @@ namespace BataTurboNet
             try
             {
                 string json = JsonConvert.SerializeObject(gps, Formatting.Indented);
-                logger.Debug(json);
+                logger.Info("PostGpsLocation " + json);
+
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var result = await httpClient.PostAsync(Properties.Settings.Default.CdbUrl, content);
+
+                logger.Info("PostObject :" + result.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                logger.Log(LogLevel.Error, ex);
+            }
+        }
+
+        private async void PostDeviceLifeSign(string deviceName, int RadioID, bool online)
+        {
+            try
+            {
+                DeviceLifeSign gps = new DeviceLifeSign();
+                gps.deviceName = deviceName;
+                gps.RadioID = RadioID;
+
+                if(online)
+                {
+                    gps.status = "online";
+                }
+                else
+                {
+                    gps.status = "offline";
+                }
+
+                string json = JsonConvert.SerializeObject(gps, Formatting.Indented);
+                logger.Info("PostDeviceLifeSign " + json);
 
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
                 var result = await httpClient.PostAsync(Properties.Settings.Default.CdbUrl, content);
@@ -114,6 +148,8 @@ namespace BataTurboNet
                 build.Append("M_client_TransmitReceiveChanged");
 
                 logger.Info(build.ToString());
+
+                PostDeviceLifeSign(device.Name, device.RadioID, true);
             }
             catch (Exception ex)
             {
@@ -154,6 +190,8 @@ namespace BataTurboNet
                 build.Append("device: " + device.Name + " ");
                 build.Append("state: " + e.State.ToString() + " ");
 
+                PostDeviceLifeSign(device.Name, device.RadioID, (e.State & DeviceState.Active) == DeviceState.Active);
+               
                 logger.Info(build.ToString());
             }
             catch (Exception ex)
@@ -190,13 +228,19 @@ namespace BataTurboNet
 
                     logger.Info(build.ToString());
 
-                    var gpsInfo = new GPSLocation();
-                    gpsInfo.devicename = device.Name;
-                    gpsInfo.Latitude = i.Latitude;
-                    gpsInfo.Longitude = i.Longitude;
-                    gpsInfo.Rssi = i.Rssi;
+                    if (i.Longitude != 0 && i.Longitude != 0)
+                    {
+                        var gpsInfo = new GPSLocation();
+                        gpsInfo.deviceName = device.Name;
+                        gpsInfo.RadioID = device.RadioID;
+                        gpsInfo.Latitude = i.Latitude;
+                        gpsInfo.Longitude = i.Longitude;
+                        gpsInfo.Rssi = i.Rssi;
 
-                    PostGpsLocation(gpsInfo);
+                        PostGpsLocation(gpsInfo);
+                    }
+
+                    PostDeviceLifeSign(device.Name, device.RadioID, true);
                 }
             }
             catch (Exception ex)
