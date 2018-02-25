@@ -21,6 +21,7 @@ using NS.Enterprise.Objects;
 using NS.Enterprise.Objects.Map;
 using System.Net.Http;
 using Newtonsoft.Json;
+using System.Timers;
 
 namespace BataTurboNet
 {
@@ -34,30 +35,23 @@ namespace BataTurboNet
         private List<Device> devices = new List<Device>();
         private static HttpClient httpClient = new HttpClient();
 
+        private Timer watchdogTimer = new Timer(60000);
+
         public MainWindow()
         {
             InitializeComponent();
+            urlTextBox.Text = Properties.Settings.Default.CdbUrl;
+            SimulationCheckBox.IsChecked = Properties.Settings.Default.Simulation;
 
-
-            if (Properties.Settings.Default.Simulation)
-            {
-                var gpsInfo = new GPSLocation();
-                gpsInfo.deviceName = "test";
-                gpsInfo.Latitude = 52.4897266086191;
-                gpsInfo.Longitude = 6.13765982910991;
-                gpsInfo.Rssi = (float)-59.5864372253418;
-
-                PostGpsLocation(gpsInfo);
-
-                PostDeviceLifeSign("test-online", 1, true);
-                PostDeviceLifeSign("test-offline", 2, false);
-            }
-            else
-            {
-                ConnectToTurboNet();
-            }
+            watchdogTimer.Elapsed += WatchdogTimer_Elapsed;
         }
 
+        private void WatchdogTimer_Elapsed(object sender, ElapsedEventArgs e)
+        {
+            PostDeviceLifeSign(Environment.MachineName, 0, true);
+        }
+
+        #region Post the results
         private async void PostGpsLocation(GPSLocation gps)
         {
             try
@@ -106,7 +100,7 @@ namespace BataTurboNet
                 logger.Log(LogLevel.Error, ex);
             }
         }
-
+        #endregion
         #region TurboNet
         private void ConnectToTurboNet()
         {
@@ -302,5 +296,40 @@ namespace BataTurboNet
             }
         }
         #endregion
+
+        private void button_Click(object sender, RoutedEventArgs e)
+        {
+            Properties.Settings.Default.Simulation = (bool)SimulationCheckBox.IsChecked;
+            Properties.Settings.Default.Save();
+
+            if (Properties.Settings.Default.Simulation)
+            {
+                var gpsInfo = new GPSLocation();
+                gpsInfo.deviceName = "test";
+                gpsInfo.Latitude = 52.4897266086191;
+                gpsInfo.Longitude = 6.13765982910991;
+                gpsInfo.Rssi = (float)-59.5864372253418;
+
+                PostGpsLocation(gpsInfo);
+
+                PostDeviceLifeSign("test-online", 1, true);
+                PostDeviceLifeSign("test-offline", 2, false);
+            }
+            else
+            {
+                ConnectToTurboNet();
+            }
+
+            watchdogTimer.Start();
+        }
+
+        private void textBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!String.IsNullOrWhiteSpace(urlTextBox.Text))
+            {
+                Properties.Settings.Default.CdbUrl = urlTextBox.Text;
+                Properties.Settings.Default.Save();
+            }
+        }
     }
 }

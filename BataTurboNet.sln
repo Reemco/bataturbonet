@@ -19,4 +19,9 @@ Global
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		BuildVersion_AssemblyInfoFilename = BataTurboNet\Properties\AssemblyInfo.cs
+		BuildVersion_UseGlobalSettings = True
+		BuildVersion_StartDate = 2000/1/1
+	EndGlobalSection
 EndGlobal
