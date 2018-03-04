@@ -63,6 +63,11 @@ namespace BataTurboNet
                 var result = await httpClient.PostAsync(Properties.Settings.Default.CdbUrl, content);
 
                 logger.Info("PostObject :" + result.StatusCode);
+
+                if (result.StatusCode != System.Net.HttpStatusCode.OK)
+                {
+                    logger.Info("Error with PostGpsLocation " + json);
+                }
             }
             catch (Exception ex)
             {
@@ -94,6 +99,11 @@ namespace BataTurboNet
                 var result = await httpClient.PostAsync(Properties.Settings.Default.CdbUrl, content);
 
                 logger.Info("PostObject :" + result.StatusCode);
+
+                if(result.StatusCode != System.Net.HttpStatusCode.OK)
+                {
+                    logger.Info("Error with PostDeviceLifeSign " + json);
+                }
             }
             catch (Exception ex)
             {
@@ -125,6 +135,57 @@ namespace BataTurboNet
                 m_client.DeviceLocationChanged += DeviceLocationChanged;
                 m_client.DeviceStateChanged += M_client_DeviceStateChanged;
                 m_client.TransmitReceiveChanged += M_client_TransmitReceiveChanged;
+                m_client.DeviceTelemetryChanged += M_client_DeviceTelemetryChanged;
+                m_client.WorkflowCommandFinished += M_client_WorkflowCommandFinished;
+            }
+            catch (Exception ex)
+            {
+                logger.Log(LogLevel.Error, ex);
+            }
+        }
+
+        private void M_client_WorkflowCommandFinished(object sender, WorkflowCommandFinishedEventArgs e)
+        {
+            try
+            {
+                var device = devices.FirstOrDefault(r => r.ID == e.DeviceId);
+
+                if (device != null)
+                {
+                    StringBuilder build = new StringBuilder();
+                    build.Append("M_client_WorkflowCommandFinished");
+                    build.Append("device: " + device.Name + " ");
+                    build.Append("state: " + e.RequestId.ToString());
+                    build.Append("state: " + e.Result.ToString());
+
+                    logger.Info(build.ToString());
+
+                    PostDeviceLifeSign(device.Name, device.RadioID, true);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.Log(LogLevel.Error, ex);
+            }
+        }
+
+        private void M_client_DeviceTelemetryChanged(object sender, DeviceTelemetryChangedEventArgs e)
+        {
+            try
+            {
+                var device = devices.FirstOrDefault(r => r.ID == e.DeviceId);
+
+                if (device != null)
+                {
+                    StringBuilder build = new StringBuilder();
+                    build.Append("M_client_DeviceTelemetryChanged");
+                    build.Append("device: " + device.Name + " ");
+                    build.Append("state: " + e.State.ToString());
+
+                    logger.Info(build.ToString());
+
+                    PostDeviceLifeSign(device.Name, device.RadioID, true);
+                }
             }
             catch (Exception ex)
             {
@@ -136,14 +197,18 @@ namespace BataTurboNet
         {
             try
             {
-                var device = devices.FirstOrDefault(r => r.ID == e.Info.ActiveDeviceID);
+                var device = devices.FirstOrDefault(r => r.ID == e.Info.TransmitDeviceID);
 
-                StringBuilder build = new StringBuilder();
-                build.Append("M_client_TransmitReceiveChanged");
+                if (device != null)
+                {
+                    StringBuilder build = new StringBuilder();
+                    build.Append("M_client_TransmitReceiveChanged");
+                    build.Append("device: " + device.Name + " ");
 
-                logger.Info(build.ToString());
+                    logger.Info(build.ToString());
 
-                PostDeviceLifeSign(device.Name, device.RadioID, true);
+                    PostDeviceLifeSign(device.Name, device.RadioID, true);
+                }
             }
             catch (Exception ex)
             {
@@ -155,17 +220,14 @@ namespace BataTurboNet
         {
             try
             {
-                foreach (var i in e.Infos)
-                {
-                    var device = devices.FirstOrDefault(r => r.ID == i.DeviceID);
+                var device = devices.FirstOrDefault(r => r.ID == e.Info.DeviceID);
 
-                    StringBuilder build = new StringBuilder();
-                    build.Append("M_client_BeaconSignal");
-                    build.Append("device: " + device.Name + " ");
-                    build.Append("batterylevel" + i.BatteryLevel + " ");
+                StringBuilder build = new StringBuilder();
+                build.Append("M_client_BeaconSignal");
+                build.Append("device: " + device.Name + " ");
+                build.Append("batterylevel" + e.Info.BatteryLevel + " ");
 
-                    logger.Info(build.ToString());
-                }
+                logger.Info(build.ToString());
             }
             catch (Exception ex)
             {
@@ -204,6 +266,7 @@ namespace BataTurboNet
 
                     StringBuilder build = new StringBuilder();
                     build.Append("DeviceLocationChanged");
+                    build.Append("active master id: " + device.ActiveMasterId.ToString() + " ");
                     build.Append("device: " + device.Name + " ");
                     build.Append("Altitude: " + i.Altitude + " ");
                     build.Append("Description: " + i.Description + " ");
