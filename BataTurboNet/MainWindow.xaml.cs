@@ -1,27 +1,18 @@
-﻿using NLog;
+﻿using Newtonsoft.Json;
+using NLog;
 using NS.Enterprise.ClientAPI;
+using NS.Enterprise.Objects;
 using NS.Enterprise.Objects.Devices;
 using NS.Enterprise.Objects.Event_args;
 using NS.Enterprise.Objects.Users;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
-using System.Threading.Tasks;
+using System.Timers;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using NS.Enterprise.Objects;
-using NS.Enterprise.Objects.Map;
-using System.Net.Http;
-using Newtonsoft.Json;
-using System.Timers;
 
 namespace BataTurboNet
 {
@@ -44,6 +35,23 @@ namespace BataTurboNet
             SimulationCheckBox.IsChecked = Properties.Settings.Default.Simulation;
 
             watchdogTimer.Elapsed += WatchdogTimer_Elapsed;
+
+            var args = Environment.GetCommandLineArgs();
+
+            if (args.Count() >= 2)
+            {
+                switch (args.ElementAt(1).ToLower())
+                {
+                    case "start":
+                        logger.Info("Auto start");
+                        Connect();
+                        break;
+                    default:
+                        logger.Info("Unkown argument:" + args.First().ToLower());
+                        break;
+                }
+
+            }
         }
 
         private void WatchdogTimer_Elapsed(object sender, ElapsedEventArgs e)
@@ -137,6 +145,8 @@ namespace BataTurboNet
                 m_client.TransmitReceiveChanged += M_client_TransmitReceiveChanged;
                 m_client.DeviceTelemetryChanged += M_client_DeviceTelemetryChanged;
                 m_client.WorkflowCommandFinished += M_client_WorkflowCommandFinished;
+
+                PostDeviceLifeSign(Environment.MachineName, 0, true);
             }
             catch (Exception ex)
             {
@@ -364,6 +374,15 @@ namespace BataTurboNet
         {
             Properties.Settings.Default.Simulation = (bool)SimulationCheckBox.IsChecked;
             Properties.Settings.Default.Save();
+
+            Connect();
+        }
+
+        private void Connect()
+        {
+            ConnectButton.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() => { ConnectButton.IsEnabled = false; }));
+            urlTextBox.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() => { urlTextBox.IsEnabled = false; }));
+            SimulationCheckBox.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() => { SimulationCheckBox.IsEnabled = false; }));
 
             if (Properties.Settings.Default.Simulation)
             {
