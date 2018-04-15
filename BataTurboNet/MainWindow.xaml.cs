@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Threading.Tasks;
 using System.Timers;
 using System.Windows;
 using System.Windows.Controls;
@@ -44,7 +45,12 @@ namespace BataTurboNet
                 {
                     case "start":
                         logger.Info("Auto start");
-                        Connect();
+                        Task task = new Task(() =>
+                        {
+                            Task.Delay(60000);
+                            Connect();
+                        });
+                        task.Start();
                         break;
                     default:
                         logger.Info("Unkown argument:" + args.First().ToLower());
@@ -64,7 +70,7 @@ namespace BataTurboNet
         {
             try
             {
-                string json = JsonConvert.SerializeObject(gps, Formatting.Indented);
+                string json = JsonConvert.SerializeObject(gps, Formatting.None);
                 logger.Info("PostGpsLocation " + json);
 
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -91,7 +97,7 @@ namespace BataTurboNet
                 gps.deviceName = deviceName;
                 gps.RadioID = RadioID;
 
-                if(online)
+                if (online)
                 {
                     gps.status = "online";
                 }
@@ -100,7 +106,7 @@ namespace BataTurboNet
                     gps.status = "offline";
                 }
 
-                string json = JsonConvert.SerializeObject(gps, Formatting.Indented);
+                string json = JsonConvert.SerializeObject(gps, Formatting.None);
                 logger.Info("PostDeviceLifeSign " + json);
 
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -108,7 +114,7 @@ namespace BataTurboNet
 
                 logger.Info("PostObject :" + result.StatusCode);
 
-                if(result.StatusCode != System.Net.HttpStatusCode.OK)
+                if (result.StatusCode != System.Net.HttpStatusCode.OK)
                 {
                     logger.Info("Error with PostDeviceLifeSign " + json);
                 }
@@ -122,43 +128,45 @@ namespace BataTurboNet
         #region TurboNet
         private void ConnectToTurboNet()
         {
-            try
+            logger.Info("Connect to turbonet server");
+
+            m_client.Disconnect();
+
+            m_client.Connect(new NS.Network.NetworkConnectionParam(Properties.Settings.Default.TurboNetHost, Properties.Settings.Default.TurboNetPort), new UserInfo(Properties.Settings.Default.TurboNetUser, Properties.Settings.Default.TurboNetPassword), ClientInitFlags.Empty);
+            if (m_client.IsStarted)
             {
-                logger.Info("Connect to turbonet server");
-
-                m_client.Disconnect();
-
-                m_client.Connect(new NS.Network.NetworkConnectionParam(Properties.Settings.Default.TurboNetHost, Properties.Settings.Default.TurboNetPort), new UserInfo(Properties.Settings.Default.TurboNetUser, Properties.Settings.Default.TurboNetPassword), ClientInitFlags.Empty);
-                if (m_client.IsStarted)
-                {
-                    logger.Info("Connected to turbonet server");
-                }
-
-                m_client.GetAllWorkflowCommands();
-
-                devices = m_client.LoadRegisteredDevicesFromServer();
-
-                m_client.BeaconSignal += M_client_BeaconSignal;
-                m_client.DevicesChanged += DevicesChanged;
-                m_client.DeviceLocationChanged += DeviceLocationChanged;
-                m_client.DeviceStateChanged += M_client_DeviceStateChanged;
-                m_client.TransmitReceiveChanged += M_client_TransmitReceiveChanged;
-                m_client.DeviceTelemetryChanged += M_client_DeviceTelemetryChanged;
-                m_client.WorkflowCommandFinished += M_client_WorkflowCommandFinished;
-
-                PostDeviceLifeSign(Environment.MachineName, 0, true);
+                logger.Info("Connected to turbonet server");
             }
-            catch (Exception ex)
+
+            m_client.GetAllWorkflowCommands();
+
+            devices = m_client.LoadRegisteredDevicesFromServer();
+
+            foreach (var dev in m_client.LoadUnregisteredDevicesFromServer())
             {
-                logger.Log(LogLevel.Error, ex);
+                dev.Name = "Radio " + dev.RadioID;
+                devices.Add(dev);
             }
+
+            m_client.BeaconSignal += M_client_BeaconSignal;
+            m_client.DevicesChanged += DevicesChanged;
+            m_client.DeviceLocationChanged += DeviceLocationChanged;
+            m_client.DeviceStateChanged += M_client_DeviceStateChanged;
+            m_client.TransmitReceiveChanged += M_client_TransmitReceiveChanged;
+            m_client.DeviceTelemetryChanged += M_client_DeviceTelemetryChanged;
+            m_client.WorkflowCommandFinished += M_client_WorkflowCommandFinished;
+
+            PostDeviceLifeSign(Environment.MachineName, 0, true);
         }
 
         private void M_client_WorkflowCommandFinished(object sender, WorkflowCommandFinishedEventArgs e)
         {
             try
             {
-                var device = devices.FirstOrDefault(r => r.ID == e.DeviceId);
+                logger.Info("M_client_WorkflowCommandFinished");
+                Device device;
+                lock (devices)
+                    device = devices.FirstOrDefault(r => r.ID == e.DeviceId);
 
                 if (device != null)
                 {
@@ -183,7 +191,11 @@ namespace BataTurboNet
         {
             try
             {
-                var device = devices.FirstOrDefault(r => r.ID == e.DeviceId);
+                logger.Info("M_client_DeviceTelemetryChanged");
+
+                Device device;
+                lock (devices)
+                    device = devices.FirstOrDefault(r => r.ID == e.DeviceId);
 
                 if (device != null)
                 {
@@ -207,7 +219,13 @@ namespace BataTurboNet
         {
             try
             {
-                var device = devices.FirstOrDefault(r => r.ID == e.Info.TransmitDeviceID);
+                logger.Info("M_client_TransmitReceiveChanged");
+
+                Device device;
+                lock (devices)
+                {
+                    device = devices.FirstOrDefault(r => r.ID == e.Info.TransmitDeviceID);
+                }
 
                 if (device != null)
                 {
@@ -230,7 +248,13 @@ namespace BataTurboNet
         {
             try
             {
-                var device = devices.FirstOrDefault(r => r.ID == e.Info.DeviceID);
+                logger.Info("M_client_BeaconSignal");
+
+                Device device;
+                lock (devices)
+                {
+                    device = devices.FirstOrDefault(r => r.ID == e.Info.DeviceID);
+                }
 
                 StringBuilder build = new StringBuilder();
                 build.Append("M_client_BeaconSignal");
@@ -249,7 +273,13 @@ namespace BataTurboNet
         {
             try
             {
-                var device = devices.FirstOrDefault(r => r.ID == e.DeviceId);
+                logger.Info("M_client_DeviceStateChanged");
+
+                Device device;
+                lock (devices)
+                {
+                    device = devices.FirstOrDefault(r => r.ID == e.DeviceId);
+                }
 
                 StringBuilder build = new StringBuilder();
                 build.Append("M_client_DeviceStateChanged");
@@ -257,7 +287,7 @@ namespace BataTurboNet
                 build.Append("state: " + e.State.ToString() + " ");
 
                 PostDeviceLifeSign(device.Name, device.RadioID, (e.State & DeviceState.Active) == DeviceState.Active);
-               
+
                 logger.Info(build.ToString());
             }
             catch (Exception ex)
@@ -270,44 +300,67 @@ namespace BataTurboNet
         {
             try
             {
+                logger.Info("DeviceLocationChanged");
+
                 foreach (var i in e.GPSData)
                 {
-                    var device = devices.FirstOrDefault(r => r.ID == i.DeviceID);
-
-                    StringBuilder build = new StringBuilder();
-                    build.Append("DeviceLocationChanged");
-                    build.Append("active master id: " + device.ActiveMasterId.ToString() + " ");
-                    build.Append("device: " + device.Name + " ");
-                    build.Append("Altitude: " + i.Altitude + " ");
-                    build.Append("Description: " + i.Description + " ");
-                    build.Append("DeviceID: " + i.DeviceID + " ");
-                    build.Append("Direction: " + i.Direction + " ");
-                    build.Append("GpsSource: " + i.GpsSource + " ");
-                    build.Append("InfoDate: " + i.InfoDate.ToString() + " ");
-                    build.Append("InfoDateUtc: " + i.InfoDateUtc.ToString() + " ");
-                    build.Append("Latitude: " + i.Latitude.ToString() + " ");
-                    build.Append("Name: " + i.Name + " ");
-                    build.Append("Radius: " + i.Radius.ToString() + " ");
-                    build.Append("ReportId: " + i.ReportId.ToString() + " ");
-                    build.Append("Rssi: " + i.Rssi.ToString() + " ");
-                    build.Append("Speed: " + i.Speed.ToString() + " ");
-                    build.Append("StopTime: " + i.StopTime.ToString() + " ");
-
-                    logger.Info(build.ToString());
-
-                    if (i.Longitude != 0 && i.Longitude != 0)
+                    Device device;
+                    lock (devices)
                     {
-                        var gpsInfo = new GPSLocation();
-                        gpsInfo.deviceName = device.Name;
-                        gpsInfo.RadioID = device.RadioID;
-                        gpsInfo.Latitude = i.Latitude;
-                        gpsInfo.Longitude = i.Longitude;
-                        gpsInfo.Rssi = i.Rssi;
+                        device = devices.FirstOrDefault(r => r.ID == i.DeviceID);
 
-                        PostGpsLocation(gpsInfo);
+                        if (device == null)
+                        {
+                            devices.Clear();
+                            devices = m_client.LoadRegisteredDevicesFromServer();
+
+                            foreach (var dev in m_client.LoadUnregisteredDevicesFromServer())
+                            {
+                                dev.Name = "Radio " + dev.RadioID;
+                                devices.Add(dev);
+                            }
+
+                            device = devices.FirstOrDefault(r => r.ID == i.DeviceID);
+                        }
                     }
 
-                    PostDeviceLifeSign(device.Name, device.RadioID, true);
+                    if (device != null)
+                    {
+                        StringBuilder build = new StringBuilder();
+                        build.Append("DeviceLocationChanged");
+                        build.Append("active master id: " + device.ActiveMasterId.ToString() + " ");
+                        build.Append("device: " + device.Name + " ");
+                        build.Append("Altitude: " + i.Altitude + " ");
+                        build.Append("Description: " + i.Description + " ");
+                        build.Append("DeviceID: " + i.DeviceID + " ");
+                        build.Append("Direction: " + i.Direction + " ");
+                        build.Append("GpsSource: " + i.GpsSource + " ");
+                        build.Append("InfoDate: " + i.InfoDate.ToString() + " ");
+                        build.Append("InfoDateUtc: " + i.InfoDateUtc.ToString() + " ");
+                        build.Append("Latitude: " + i.Latitude.ToString() + " ");
+                        build.Append("Name: " + i.Name + " ");
+                        build.Append("Radius: " + i.Radius.ToString() + " ");
+                        build.Append("ReportId: " + i.ReportId.ToString() + " ");
+                        build.Append("Rssi: " + i.Rssi.ToString() + " ");
+                        build.Append("Speed: " + i.Speed.ToString() + " ");
+                        build.Append("StopTime: " + i.StopTime.ToString() + " ");
+
+                        logger.Info(build.ToString());
+
+                        if (i.Longitude != 0 && i.Longitude != 0)
+                        {
+                            var gpsInfo = new GPSLocation();
+                            gpsInfo.deviceName = device.Name;
+                            gpsInfo.RadioID = device.RadioID;
+                            gpsInfo.Latitude = i.Latitude;
+                            gpsInfo.Longitude = i.Longitude;
+                            gpsInfo.Rssi = i.Rssi;
+
+                            PostGpsLocation(gpsInfo);
+                        }
+
+                        PostDeviceLifeSign(device.Name, device.RadioID, true);
+                    }
                 }
             }
             catch (Exception ex)
@@ -320,47 +373,64 @@ namespace BataTurboNet
         {
             try
             {
-                switch (e.Action)
+                logger.Info("DevicesChanged");
+                lock (devices)
                 {
-                    case NS.Shared.Common.ChangeAction.Add:
-                        devices.Add(e.ChangedObject);
-                        break;
-                    case NS.Shared.Common.ChangeAction.Remove:
-                        {
-                            Device device = null;
-                            foreach (Device item in devices)
+                    switch (e.Action)
+                    {
+                        case NS.Shared.Common.ChangeAction.Add:
+                            lock (devices)
+                                devices.Add(e.ChangedObject);
+                            break;
+                        case NS.Shared.Common.ChangeAction.Remove:
                             {
-                                if (e.ChangedObject.ID == item.ID)
+
+                                Device device = null;
+                                foreach (Device item in devices)
                                 {
-                                    device = item;
-                                    break;
+                                    if (e.ChangedObject.ID == item.ID)
+                                    {
+                                        device = item;
+                                        break;
+                                    }
+                                }
+                                if (device != null)
+                                {
+                                    devices.Remove(device);
                                 }
                             }
-                            if (device != null)
-                                devices.Remove(device);
-                        }
-                        break;
-                    case NS.Shared.Common.ChangeAction.ItemChanged:
-                        {
-                            Device device = null;
-                            foreach (Device item in devices)
+                            break;
+                        case NS.Shared.Common.ChangeAction.ItemChanged:
                             {
-                                if (e.ChangedObject.ID == item.ID)
+                                Device device = null;
+                                foreach (Device item in devices)
                                 {
-                                    device = item;
-                                    break;
+                                    if (e.ChangedObject.ID == item.ID)
+                                    {
+                                        device = item;
+                                        break;
+                                    }
+                                }
+                                if (device != null)
+                                {
+                                    device.Update(e.ChangedObject);
                                 }
                             }
-                            if (device != null)
-                                device.Update(e.ChangedObject);
-                        }
-                        break;
-                    case NS.Shared.Common.ChangeAction.MuchChanges:
-                        devices.Clear();
-                        devices = m_client.LoadRegisteredDevicesFromServer();
-                        break;
-                    default:
-                        break;
+                            break;
+                        case NS.Shared.Common.ChangeAction.MuchChanges:
+                            devices.Clear();
+                            devices = m_client.LoadRegisteredDevicesFromServer();
+
+                            foreach (var dev in m_client.LoadUnregisteredDevicesFromServer())
+                            {
+                                dev.Name = "Radio " + dev.RadioID;
+                                devices.Add(dev);
+                            }
+
+                            break;
+                        default:
+                            break;
+                    }
                 }
             }
             catch (Exception ex)
@@ -378,31 +448,49 @@ namespace BataTurboNet
             Connect();
         }
 
+        private bool Connected = false;
+        private object ConnectLock = new object();
         private void Connect()
         {
-            ConnectButton.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() => { ConnectButton.IsEnabled = false; }));
-            urlTextBox.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() => { urlTextBox.IsEnabled = false; }));
-            SimulationCheckBox.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() => { SimulationCheckBox.IsEnabled = false; }));
-
-            if (Properties.Settings.Default.Simulation)
+            try
             {
-                var gpsInfo = new GPSLocation();
-                gpsInfo.deviceName = "test";
-                gpsInfo.Latitude = 52.4897266086191;
-                gpsInfo.Longitude = 6.13765982910991;
-                gpsInfo.Rssi = (float)-59.5864372253418;
+                lock (ConnectLock)
+                {
+                    if (!Connected)
+                    {
+                        if (Properties.Settings.Default.Simulation)
+                        {
+                            var gpsInfo = new GPSLocation();
+                            gpsInfo.deviceName = "test";
+                            gpsInfo.Latitude = 52.4897266086191;
+                            gpsInfo.Longitude = 6.13765982910991;
+                            gpsInfo.Rssi = (float)-59.5864372253418;
 
-                PostGpsLocation(gpsInfo);
+                            PostGpsLocation(gpsInfo);
 
-                PostDeviceLifeSign("test-online", 1, true);
-                PostDeviceLifeSign("test-offline", 2, false);
+                            PostDeviceLifeSign("test-online", 1, true);
+                            PostDeviceLifeSign("test-offline", 2, false);
+
+                        }
+                        else
+                        {
+                            ConnectToTurboNet();
+                        }
+
+                        watchdogTimer.Start();
+
+                        ConnectButton.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() => { ConnectButton.IsEnabled = false; }));
+                        urlTextBox.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() => { urlTextBox.IsEnabled = false; }));
+                        SimulationCheckBox.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() => { SimulationCheckBox.IsEnabled = false; }));
+
+                        Connected = true;
+                    }
+                }
             }
-            else
+            catch (Exception ex)
             {
-                ConnectToTurboNet();
+                logger.Log(LogLevel.Error, ex);
             }
-
-            watchdogTimer.Start();
         }
 
         private void textBox_TextChanged(object sender, TextChangedEventArgs e)
