@@ -141,6 +141,10 @@ namespace BataTurboNet
             m_client.GetAllWorkflowCommands();
 
             devices = m_client.LoadRegisteredDevicesFromServer();
+            foreach (var device in devices)
+            {
+                PostDeviceLifeSign(device.Name, device.RadioID, false);
+            }
 
             foreach (var dev in m_client.LoadUnregisteredDevicesFromServer())
             {
