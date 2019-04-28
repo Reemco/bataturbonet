@@ -132,7 +132,7 @@ namespace BataTurboNet
 
             m_client.Disconnect();
 
-            m_client.Connect(new NS.Network.NetworkConnectionParam(Properties.Settings.Default.TurboNetHost, Properties.Settings.Default.TurboNetPort), new UserInfo(Properties.Settings.Default.TurboNetUser, Properties.Settings.Default.TurboNetPassword), ClientInitFlags.Empty);
+            m_client.Connect(new NS.Shared.Network.NetworkConnectionParam(Properties.Settings.Default.TurboNetHost, Properties.Settings.Default.TurboNetPort), new UserInfo(Properties.Settings.Default.TurboNetUser, Properties.Settings.Default.TurboNetPassword), ClientInitFlags.Empty);
             if (m_client.IsStarted)
             {
                 logger.Info("Connected to turbonet server");
@@ -254,18 +254,21 @@ namespace BataTurboNet
             {
                 logger.Info("M_client_BeaconSignal");
 
-                Device device;
-                lock (devices)
+                foreach (var radio in e.Infos)
                 {
-                    device = devices.FirstOrDefault(r => r.ID == e.Info.DeviceID);
+                    Device device;
+                    lock (devices)
+                    {
+                        device = devices.FirstOrDefault(r => r.ID == radio.DeviceID);
+                    }
+
+                    StringBuilder build = new StringBuilder();
+                    build.Append("M_client_BeaconSignal");
+                    build.Append("device: " + device.Name + " ");
+                    build.Append("batterylevel" + radio.BatteryLevel + " ");
+
+                    logger.Info(build.ToString());
                 }
-
-                StringBuilder build = new StringBuilder();
-                build.Append("M_client_BeaconSignal");
-                build.Append("device: " + device.Name + " ");
-                build.Append("batterylevel" + e.Info.BatteryLevel + " ");
-
-                logger.Info(build.ToString());
             }
             catch (Exception ex)
             {
@@ -279,20 +282,23 @@ namespace BataTurboNet
             {
                 logger.Info("M_client_DeviceStateChanged");
 
-                Device device;
-                lock (devices)
+                foreach (var radio in e.Infos)
                 {
-                    device = devices.FirstOrDefault(r => r.ID == e.DeviceId);
+                    Device device;
+                    lock (devices)
+                    {
+                            device = devices.FirstOrDefault(r => r.ID == radio.DeviceId);
+                    }
+
+                    StringBuilder build = new StringBuilder();
+                    build.Append("M_client_DeviceStateChanged");
+                    build.Append("device: " + device.Name + " ");
+                    build.Append("state: " + radio.State.ToString() + " ");
+
+                    PostDeviceLifeSign(device.Name, device.RadioID, (radio.State & DeviceState.Active) == DeviceState.Active);
+
+                    logger.Info(build.ToString());
                 }
-
-                StringBuilder build = new StringBuilder();
-                build.Append("M_client_DeviceStateChanged");
-                build.Append("device: " + device.Name + " ");
-                build.Append("state: " + e.State.ToString() + " ");
-
-                PostDeviceLifeSign(device.Name, device.RadioID, (e.State & DeviceState.Active) == DeviceState.Active);
-
-                logger.Info(build.ToString());
             }
             catch (Exception ex)
             {
@@ -332,7 +338,6 @@ namespace BataTurboNet
                     {
                         StringBuilder build = new StringBuilder();
                         build.Append("DeviceLocationChanged");
-                        build.Append("active master id: " + device.ActiveMasterId.ToString() + " ");
                         build.Append("device: " + device.Name + " ");
                         build.Append("Altitude: " + i.Altitude + " ");
                         build.Append("Description: " + i.Description + " ");
